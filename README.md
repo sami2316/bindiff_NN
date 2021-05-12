@@ -1,7 +1,6 @@
 # bindiff_NN
 
-#### BinDiff_NN: Learning Distributed Representation of Assembly for Robust
-####             Binary Diffing against Semantic Differences
+#### BinDiff_NN: Learning Distributed Representation of Assembly for Robust Binary Diffing against Semantic Differences
 
 Install the dependencies and Python3 to run code. The details instructions for
 installation are comming soon. 
