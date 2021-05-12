@@ -26,6 +26,13 @@ import hashlib
 from os import walk
 from io import StringIO
 from difflib import SequenceMatcher
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-d1", "--database1_path", help="IDA pro extracted database file")
+parser.add_argument("-d2", "--database2_path", help="IDA pro extracted database file")
+parser.add_argument("-g", "--ground_truth", help="Excel file for the ground truth")
+args = parser.parse_args()
 #-----------------------------------------------------------------------
 def result_iter(cursor, arraysize=1000):
   'An iterator that uses fetchmany to keep memory usage down'
@@ -107,26 +114,13 @@ class AsmData(object):
     self.instructions_b = []
 #-----------------------------------------------------------------
 class ASMParser(Database):
-  def __init__(self, dirpath):
-    self.dir_path = os.path.join(os.getcwd(), dirpath)
-    self.dbfile_list = []
-    self.csvfile_list = []
+  def __init__(self, db1path, db2path, gtpath):
+    self.db1_path = db1path
+    self.db2_path = db2path
+    self.gt_path = gtpath
     self.functions = []
     self.re_cache = {}
     self.hashes = []
-
-  def list_files(self, directory):
-    files = []
-    for (dirpath, dirnames,filenames) in walk(directory):
-      files.extend(filenames)
-      break
-    for l in files:
-      tmp = l.split(".")
-      if tmp[-1] == "sqlite":
-        self.dbfile_list.append(l)
-      elif tmp[-1] == 'csv':
-        if l == 'xnu-4570_31_41.csv':
-          self.csvfile_list.append(l)
 
   # Get clean Assembly
   def get_cmp_asm_lines(self, asm):
@@ -172,31 +166,25 @@ class ASMParser(Database):
     re_obj = self.re_cache[text]
     return re_obj.sub(repl, string)
 
-  def parse_one(self, file_name):
-    # read the csv file
+  def generate_ground_truth(self):
     partial = []
     count = 0
-    csv_path = os.path.join(self.dir_path, file_name)
-    with open(csv_path) as fp:
+    # read the csv file
+    with open(self.gt_path) as fp:
+      base_name = os.path.basename(self.gt_path)
       csv_reader = csv.reader(fp, delimiter=',')
-      if 'linux' in file_name:
+      if 'linux' in base_name:
         partial = [line[0] for line in csv_reader][1:]
-      elif 'xnu-4570_41_51' in file_name:
+      elif 'xnu-4570_41_51' in base_name:
         partial = [line[0] for line in csv_reader][1:]
       else:
         partial = ['_'+line[0] if '::' not in line[0] else line[0] for line in csv_reader][1:]
 
-    tmp = file_name.split('_')
-    db1 = tmp[0] + '_' + tmp[1] + '.sqlite'
-    db2 = tmp[0] + '_' + tmp[2][:-4] + '.sqlite'
-    if db1 not in self.dbfile_list and db2 not in self.dbfile_list:
-      return
+    
 
-    db1_path = os.path.join(self.dir_path, db1)
-    db2_path = os.path.join(self.dir_path, db2)
-    db_handle = Database(db1_path)
-    db_handle.attach(db2_path)
-    print("Extracting the assembly from {0} and {1}".format(db1, db2))
+    db_handle = Database(self.db1_path)
+    db_handle.attach(self.db2_path)
+    print("Extracting the assembly from {0} and {1}".format(os.path.basename(self.db1_path), os.path.basename(self.db2_path)))
     query_assembly = """select f1.name name1,f1.assembly asm1, f2.assembly asm2 
                         from (select distinct name, assembly from functions group by name
                              having id = min(id)) f1
@@ -234,12 +222,15 @@ class ASMParser(Database):
     print("Total function = {0}\n Partial = {1}".format(count, p_count))
     self.functions.extend(list(lfunctions.values()))
 
-  def parse_all(self):
-    self.list_files(self.dir_path)
+  def parse_assembly_data(self):
 
-    for filename in self.csvfile_list:
-      self.parse_one(filename)
-
+    self.generate_ground_truth()
+    #
+    # Create directory where results will be written to.
+    #
+    if not os.access('asmdata', os.F_OK):
+      os.makedirs('asmdata')
+    
     with open('asmdata/test_data.txt', 'w') as fp:
       for item in self.functions:
         fp.write('label:' + str(item.label) + '\n')
@@ -247,6 +238,22 @@ class ASMParser(Database):
         fp.write('assembly_b:\n' + item.instructions_b)
         fp.write('\n')
 
+def verify():
+  if not os.path.exists(args.database1_path):
+    print("Database file {%s} does not exits" % args.database1_path)
+    return False
+  if not os.path.exists(args.database2_path):
+    print("Database file {%s} does not exits" % args.database2_path)
+    return False
+  if not os.path.exists(args.ground_truth):
+    print("Ground truth file missing")
+    return False
+
+  return True
+
 if __name__ == '__main__':
-  handle = ASMParser('databases')
-  handle.parse_all()
+  if all(vars(args).values()) and verify():
+    handle = ASMParser(args.database1_path, args.database2_path, args.ground_truth)
+    handle.parse_assembly_data()
+  else:
+    parser.print_help()
