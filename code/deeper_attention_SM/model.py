@@ -128,13 +128,8 @@ class Asm2Vec(nn.Module):
 
     distance = 1 - torch.exp(-torch.abs(output_a - output_b))
     preds = self.output_linear(torch.cat((distance, output_a, output_b), dim=1))
+    preds = F.softmax(preds, dim=1)
 
-    #loss = eloss(output_a, output_b, label)
-    #preds = F.sigmoid(distance)
-    #preds_values, _ = torch.max(preds, dim=1)
-    #preds = torch.tensor([1 if x > 0.5 else 0 for x in preds_values.tolist()])
-    #print(preds, label)
-    #preds = torch.sub(torch.ones_like(non_linear), non_linear.round())
     return preds, distance
 
   def get_attention(self, vectors, mask):

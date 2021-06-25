@@ -116,8 +116,7 @@ def train():
   builder = DatasetBuilder(reader, options)
 
   label_freq = torch.tensor(reader.label_vocab.get_freq_list(), dtype=torch.float32).to(device)
-  #criterion = nn.NLLLoss(weight=1 / options.batch_size/label_freq).to(device)
-  criterion = nn.BCEWithLogitsLoss().to(device)
+  criterion = nn.BCELoss().to(device)
 
   model = Asm2Vec(options).to(device)
   print(model)
